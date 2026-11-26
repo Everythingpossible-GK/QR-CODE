@@ -1,50 +1,86 @@
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PDF QR Generator</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>PDF QR Code Generator</title>
 
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
 <style>
+* {
+    box-sizing: border-box;
+}
+
 body {
     font-family: Arial, sans-serif;
     background: #eef2f6;
+    padding: 25px;
     text-align: center;
-    padding: 30px;
 }
 
 .container {
+    max-width: 500px;
+    margin: 40px auto;
     background: white;
-    max-width: 450px;
-    margin: auto;
     padding: 30px;
     border-radius: 15px;
     box-shadow: 0 5px 20px #0002;
 }
 
+h2 {
+    color: #003b70;
+}
+
 input {
-    max-width: 100%;
-    margin: 20px 0;
+    width: 100%;
+    padding: 15px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 15px;
+    margin: 15px 0;
 }
 
 button {
+    width: 100%;
+    padding: 15px;
     background: #005b91;
     color: white;
     border: none;
-    padding: 14px;
     border-radius: 8px;
-    width: 100%;
     cursor: pointer;
-    margin-top: 15px;
+    margin: 8px 0;
+    font-size: 15px;
+}
+
+button:hover {
+    background: #003b70;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 #qrcode {
     display: flex;
     justify-content: center;
-    background: white;
-    padding: 20px;
+    padding: 25px;
+}
+
+#status {
+    font-size: 14px;
+}
+
+.note {
+    font-size: 13px;
+    color: #666;
+}
+
+a {
+    color: #005b91;
 }
 </style>
 </head>
@@ -55,7 +91,10 @@ button {
 
 <h2>PDF QR CODE GENERATOR</h2>
 
-<input type="file" id="file" accept=".pdf">
+<p>Paste your Google Drive file link</p>
+
+<input type="url" id="fileLink"
+placeholder="https://drive.google.com/file/d/...">
 
 <button onclick="generateQR()">
 Generate QR Code
@@ -65,85 +104,134 @@ Generate QR Code
 
 <div id="qrcode"></div>
 
-<button onclick="downloadQR()">
+<a id="viewLink" target="_blank"
+rel="noopener noreferrer" hidden>
+Open PDF Document
+</a>
+
+<button id="downloadButton"
+onclick="downloadQR()" disabled>
 Download QR Code
 </button>
+
+<button onclick="clearAll()">
+Clear
+</button>
+
+<p class="note">
+Ensure Google Drive sharing is set to
+Anyone with the link - Viewer.
+</p>
 
 </div>
 
 <script>
 
-async function generateQR() {
+function generateQR() {
 
-    const file = document.getElementById("file").files[0];
+    const input = document.getElementById("fileLink");
     const status = document.getElementById("status");
+    const qr = document.getElementById("qrcode");
+    const viewLink = document.getElementById("viewLink");
+    const download = document.getElementById("downloadButton");
 
-    if (!file) {
-        alert("Please select a PDF file");
-        return;
-    }
-
-    const data = new FormData();
-    data.append("file", file);
-
-    status.textContent = "Uploading file...";
+    qr.innerHTML = "";
+    viewLink.hidden = true;
+    download.disabled = true;
 
     try {
 
-        const response = await fetch("/upload", {
-            method: "POST",
-            body: data
-        });
+        const url = new URL(input.value.trim());
 
-        if (!response.ok) {
-            throw new Error("Upload failed");
+        if (url.protocol !== "https:" ||
+            url.hostname !== "drive.google.com") {
+            throw new Error("Enter a valid Google Drive link.");
         }
 
-        const result = await response.json();
-        const url = new URL(result.url, location.origin);
+        const match = url.pathname.match(
+            /\/file\/d\/([a-zA-Z0-9_-]+)/
+        );
 
-        if (url.protocol !== "https:") {
-            throw new Error("HTTPS document link required");
+        const id = match ? match[1] :
+            url.searchParams.get("id");
+
+        if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+            throw new Error("Invalid Google Drive file link.");
         }
 
-        document.getElementById("qrcode").innerHTML = "";
+        const directLink = new URL(
+            "https://drive.google.com/file/d/" +
+            id + "/view"
+        );
 
-        new QRCode(document.getElementById("qrcode"), {
-            text: url.href,
-            width: 250,
-            height: 250
+        const resourceKey =
+            url.searchParams.get("resourcekey");
+
+        if (resourceKey) {
+            directLink.searchParams.set(
+                "resourcekey", resourceKey
+            );
+        }
+
+        new QRCode(qr, {
+            text: directLink.href,
+            width: 280,
+            height: 280,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
         });
 
-        status.textContent = "QR Code Generated";
+        viewLink.href = directLink.href;
+        viewLink.hidden = false;
+        download.disabled = false;
+
+        status.style.color = "green";
+        status.textContent =
+            "QR Code Generated Successfully!";
 
     } catch (error) {
-        status.textContent =
-        "Document server unavailable. Check hosting.";
+
+        status.style.color = "red";
+        status.textContent = error.message;
     }
 }
 
 function downloadQR() {
 
-    const canvas = document.querySelector("#qrcode canvas");
+    const canvas =
+        document.querySelector("#qrcode canvas");
 
     if (!canvas) {
-        alert("Generate QR code first");
+        alert("Generate QR code first.");
         return;
     }
 
     const output = document.createElement("canvas");
-    output.width = 310;
-    output.height = 310;
+
+    output.width = 360;
+    output.height = 360;
 
     const ctx = output.getContext("2d");
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, 310, 310);
-    ctx.drawImage(canvas, 30, 30);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, 360, 360);
+    ctx.drawImage(canvas, 40, 40);
 
     const link = document.createElement("a");
-    link.download = "Document-QR.png";
+
+    link.download = "PDF-QR-Code.png";
     link.href = output.toDataURL("image/png");
     link.click();
+}
+
+function clearAll() {
+
+    document.getElementById("fileLink").value = "";
+    document.getElementById("qrcode").innerHTML = "";
+    document.getElementById("status").textContent = "";
+    document.getElementById("viewLink").hidden = true;
+    document.getElementById("downloadButton").disabled = true;
 }
 
 </script>
