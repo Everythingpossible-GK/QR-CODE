@@ -17,7 +17,7 @@
 body {
     font-family: Arial, sans-serif;
     background: #eef2f6;
-    padding: 25px;
+    padding: 20px;
     text-align: center;
 }
 
@@ -67,7 +67,12 @@ button:disabled {
 #qrcode {
     display: flex;
     justify-content: center;
-    padding: 25px;
+    padding: 20px 0;
+}
+
+#qrcode canvas,
+#qrcode img {
+    max-width: 100%;
 }
 
 #status {
@@ -91,10 +96,10 @@ a {
 
 <h2>PDF QR CODE GENERATOR</h2>
 
-<p>Paste your Google Drive file link</p>
+<p>Paste your Google Drive PDF link</p>
 
 <input type="url" id="fileLink"
-placeholder="https://drive.google.com/file/d/...">
+placeholder="Paste Google Drive link here">
 
 <button onclick="generateQR()">
 Generate QR Code
@@ -104,9 +109,11 @@ Generate QR Code
 
 <div id="qrcode"></div>
 
-<a id="viewLink" target="_blank"
-rel="noopener noreferrer" hidden>
-Open PDF Document
+<a id="previewLink"
+target="_blank"
+rel="noopener noreferrer"
+hidden>
+Test PDF Preview
 </a>
 
 <button id="downloadButton"
@@ -119,7 +126,7 @@ Clear
 </button>
 
 <p class="note">
-Ensure Google Drive sharing is set to
+Google Drive sharing must be set to
 Anyone with the link - Viewer.
 </p>
 
@@ -132,58 +139,66 @@ function generateQR() {
     const input = document.getElementById("fileLink");
     const status = document.getElementById("status");
     const qr = document.getElementById("qrcode");
-    const viewLink = document.getElementById("viewLink");
+    const preview = document.getElementById("previewLink");
     const download = document.getElementById("downloadButton");
 
     qr.innerHTML = "";
-    viewLink.hidden = true;
+    preview.hidden = true;
     download.disabled = true;
 
     try {
 
-        const url = new URL(input.value.trim());
+        const originalURL = new URL(input.value.trim());
 
-        if (url.protocol !== "https:" ||
-            url.hostname !== "drive.google.com") {
+        if (
+            originalURL.protocol !== "https:" ||
+            originalURL.hostname !== "drive.google.com"
+        ) {
             throw new Error("Enter a valid Google Drive link.");
         }
 
-        const match = url.pathname.match(
+        const match = originalURL.pathname.match(
             /\/file\/d\/([a-zA-Z0-9_-]+)/
         );
 
-        const id = match ? match[1] :
-            url.searchParams.get("id");
+        const fileID = match
+            ? match[1]
+            : originalURL.searchParams.get("id");
 
-        if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+        if (!fileID ||
+            !/^[a-zA-Z0-9_-]+$/.test(fileID)) {
             throw new Error("Invalid Google Drive file link.");
         }
 
-        const directLink = new URL(
+        // Generate PDF preview link
+        const previewURL = new URL(
             "https://drive.google.com/file/d/" +
-            id + "/view"
+            fileID + "/preview"
         );
 
+        // Preserve resource key if required
         const resourceKey =
-            url.searchParams.get("resourcekey");
+            originalURL.searchParams.get("resourcekey");
 
         if (resourceKey) {
-            directLink.searchParams.set(
-                "resourcekey", resourceKey
+            previewURL.searchParams.set(
+                "resourcekey",
+                resourceKey
             );
         }
 
+        // Generate QR code
         new QRCode(qr, {
-            text: directLink.href,
-            width: 280,
-            height: 280,
+            text: previewURL.href,
+            width: 256,
+            height: 256,
             colorDark: "#000000",
             colorLight: "#ffffff",
             correctLevel: QRCode.CorrectLevel.M
         });
 
-        viewLink.href = directLink.href;
-        viewLink.hidden = false;
+        preview.href = previewURL.href;
+        preview.hidden = false;
         download.disabled = false;
 
         status.style.color = "green";
@@ -209,14 +224,17 @@ function downloadQR() {
 
     const output = document.createElement("canvas");
 
-    output.width = 360;
-    output.height = 360;
+    output.width = 1024;
+    output.height = 1024;
 
     const ctx = output.getContext("2d");
 
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, 360, 360);
-    ctx.drawImage(canvas, 40, 40);
+    ctx.fillRect(0, 0, 1024, 1024);
+
+    ctx.imageSmoothingEnabled = false;
+
+    ctx.drawImage(canvas, 128, 128, 768, 768);
 
     const link = document.createElement("a");
 
@@ -230,7 +248,7 @@ function clearAll() {
     document.getElementById("fileLink").value = "";
     document.getElementById("qrcode").innerHTML = "";
     document.getElementById("status").textContent = "";
-    document.getElementById("viewLink").hidden = true;
+    document.getElementById("previewLink").hidden = true;
     document.getElementById("downloadButton").disabled = true;
 }
 
